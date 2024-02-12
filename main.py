@@ -16,7 +16,6 @@ import psutil
 
 MEMORY_MAX = 200  # MB
 
-
 class DeskWebLearn(QApplication):
     floating_window = None
     main_window = None

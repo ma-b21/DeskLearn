@@ -14,7 +14,10 @@ from qfluentwidgets.components.widgets.info_bar import InfoBarIcon, InfoBarPosit
 import icons_rc
 import sys, os
 import WebLearning as spider
+from concurrent.futures import ThreadPoolExecutor
 from PyQt5 import sip
+from utils import get_latest_version, download_new_version, trans_size
+import time
 
 
 class Ui_Notice(object):
@@ -639,6 +642,8 @@ class CourseWidget(QtWidgets.QWidget):
 
 class SettingWidget(QtWidgets.QWidget):
     semesterChanged = QtCore.pyqtSignal(str)
+    download_new_version = QtCore.pyqtSignal(str, str)
+    download_progress = QtCore.pyqtSignal(str, str, int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -712,6 +717,53 @@ class SettingWidget(QtWidgets.QWidget):
         self.verticalLayout.insertWidget(1, self.semester)
         self.configItem.valueChanged.connect(
             lambda: self.semesterChanged.emit(self.configItem.value))
+
+    def insertVersionInfo(self, version: str):
+        latest_version, download_url = get_latest_version()  
+        def download():
+            def thread_func():
+                file = download_new_version(download_url)
+                file_size = next(file)
+                file_name = download_url.split("/")[-1]
+                with open(file_name, "wb") as f:
+                    self.download_new_version.emit(file_name, ".")
+                    start_time = time.time()
+                    last_time = start_time
+                    current_size = 0
+                    for chunk in file:
+                        f.write(chunk)
+                        current_size += len(chunk)
+                        if current_size == file_size:
+                            self.download_progress.emit(file_name, "下载完成√", file_size, file_size)
+                            break
+                        elapsed_time = time.time() - start_time
+                        if time.time() - last_time > 0.3:
+                            last_time = time.time()
+                            speed = current_size / elapsed_time
+                            self.download_progress.emit(file_name, trans_size(speed), current_size, file_size)
+                return file_name 
+            with ThreadPoolExecutor() as executor:
+                worker = executor.submit(thread_func)
+                while not worker.done():
+                    QtWidgets.QApplication.processEvents()
+                file_name = worker.result()
+                os.startfile(file_name)
+
+        self.version = HyperlinkCard(
+            "",
+            "下载新版本" + latest_version,
+            FluentIcon("Update"),
+            "更新",
+            "当前版本：" + version,
+            parent=self
+        )
+        self.version.setFixedHeight(60)
+        self.version.iconLabel.setFixedSize(25, 25)
+        self.version.setObjectName("version")
+        if version == latest_version:
+            self.version.linkButton.hide()
+        self.verticalLayout.insertWidget(3, self.version)
+        self.version.linkButton.clicked.connect(download)
 
 
 class Ui_download(object):
@@ -962,10 +1014,6 @@ class download_window(QtWidgets.QFrame, Ui_download_window):
             self.empty.setImage(QtGui.QImage(":/empty"))
             self.empty.setFixedSize(150, 150)
             self.download_widget.setStyleSheet("")
-
-    # def show(self, pos: QtCore.QPoint):
-    #     # 设置窗口动画
-    #     super().show()
 
 
 if __name__ == "__main__":

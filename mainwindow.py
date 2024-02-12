@@ -12,7 +12,22 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 from element import download_window
 from utils import trans_size
+import win32api
 
+def get_self_version():
+    try:
+        # 获取当前运行的exe文件路径
+        executable_path = sys.executable
+        # 获取文件的版本信息
+        info = win32api.GetFileVersionInfo(executable_path, "\\")
+        # 提取产品版本的主版本号和次版本号
+        product_version_ms = info['ProductVersionMS']
+        major = product_version_ms >> 16
+        minor = product_version_ms & 0xFFFF
+        # 返回格式化的主版本号和次版本号
+        return f"v{major}.{minor}"
+    except Exception as e:
+        return f"无法获取版本号: {str(e)}"
 
 class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
     theme = Theme.LIGHT
@@ -39,6 +54,7 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
     def __init__(self, student: Student):
         super().__init__()
         self.setupUi(self)
+        self.version = get_self_version()
         self.student = student
         self.courses = student.courses
         self.uname.setText(student.name)
@@ -714,6 +730,9 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
         self.setting_page.logout.clicked.connect(self._logout)
         self.setting_page.insertSemester(self.student.semesters)
         self.setting_page.semesterChanged.connect(self._changeSemester)
+        self.setting_page.insertVersionInfo(self.version)
+        self.setting_page.download_new_version.connect(lambda filename, path: self.downloadSignal.emit(filename, path))
+        self.setting_page.download_progress.connect(lambda filename, speed, current, total: self.downloadChanged.emit(filename, speed, current, total))
 
     def _changeSemester(self, semester: str):
         waitRing = StateToolTip("正在切换...", "请耐心等待", parent=self)
